@@ -59,6 +59,20 @@ edge_tts_timeout = 30
 tls_verify = true
 
 # -----------------------------------------------------------------------------
+# TV review/comparison script variant / 电视测评脚本变体
+# -----------------------------------------------------------------------------
+# See app/services/tv_specs.py and app/services/tv_review_script.py, and the
+# cli.py --tv-review-specs / --tv-specs-file / --tv-comparison-angle flags.
+
+# Where TV specs records come from. Only "local_json" is implemented today
+# (a JSON or CSV file you maintain yourself). "scraping" and "affiliate_api"
+# are reserved names for a source to be decided and implemented later.
+tv_review_specs_source = "local_json"
+
+# Path to the local_json backend's data file (JSON list or CSV).
+tv_review_specs_path = "resource/tv_specs/example.json"
+
+# -----------------------------------------------------------------------------
 # Video Materials / 视频素材
 # -----------------------------------------------------------------------------
 
