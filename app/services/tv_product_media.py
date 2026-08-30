@@ -2,7 +2,7 @@
 
 Each TV has a folder-like key prefix in one R2 bucket (e.g.
 ``SAMSUNG_QN90D_55/``), matching ``TVSpecs.product_images_prefix``. Inside
-that prefix. Filenames don't need a special convention — plain camera
+that prefix, filenames don't need a special convention — plain camera
 exports (``IMG_2087.jpg``...) work fine, since a leading number (if any)
 is used for ordering but isn't required. The pipeline doesn't depend on a
 fixed photo order: each photo becomes its own Ken Burns clip and
@@ -33,6 +33,7 @@ breaking the run.
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import Optional
@@ -178,7 +179,12 @@ def download_and_cache_product_media(
     if not prefix:
         return []
 
-    cache_root = utils.storage_dir("tv_product_media_cache", create=True)
+    # preprocess_video() only accepts local materials that resolve inside
+    # storage/local_videos (app/utils/file_security.py's path guard), so
+    # the R2 cache must live under that same directory, not a sibling one.
+    cache_root = utils.storage_dir(
+        os.path.join("local_videos", "tv_product_media_cache"), create=True
+    )
     prefix_cache_dir = Path(cache_root) / prefix.strip("/")
 
     if method == "public_url":

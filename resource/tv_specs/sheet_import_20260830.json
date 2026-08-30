@@ -14,7 +14,8 @@
     "pros": ["HDR10+ support at this price point", "Dolby Atmos and DTS-X audio", "Alexa built in"],
     "cons": ["Only 300 nits peak brightness", "2GB RAM / 32GB storage, entry-level specs"],
     "affiliate_url": "https://amzn.eu/d/0eefmn0n",
-    "source": "google_sheet_2026-08-30"
+    "source": "google_sheet_2026-08-30",
+    "product_images_prefix": "XIAOMI_TV_F_PRO_43/"
   },
   {
     "brand": "Xiaomi",

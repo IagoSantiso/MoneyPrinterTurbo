@@ -1,8 +1,10 @@
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app.services import tv_product_media as tpm
+from app.utils import utils
 
 
 class TestSortKey:
@@ -102,3 +104,23 @@ class TestDownloadAndCacheProductMedia:
     def test_no_objects_found_returns_empty_for_fallback(self):
         with patch.object(tpm, "list_product_media_keys_via_api", return_value=[]):
             assert tpm.download_and_cache_product_media("EMPTY_PREFIX/") == []
+
+    def test_cached_files_land_inside_storage_local_videos(self):
+        """Regression test: preprocess_video()'s path-security guard
+        (app/utils/file_security.py) only accepts local materials that
+        resolve inside storage/local_videos. Caching R2 downloads to a
+        sibling directory made every real download get silently rejected
+        as 'outside the allowed directory' and fall back to stock, even
+        though the R2 fetch itself succeeded.
+        """
+        mock_client = MagicMock()
+        with patch.object(
+            tpm, "list_product_media_keys_via_api", return_value=["P/IMG_1.jpg"]
+        ), patch.object(
+            tpm, "_r2_config", return_value={"bucket_name": "tv-assets"}
+        ), patch.object(tpm, "get_r2_client", return_value=mock_client):
+            paths = tpm.download_and_cache_product_media("P/")
+
+        assert len(paths) == 1
+        local_videos_dir = Path(utils.storage_dir("local_videos"))
+        assert local_videos_dir in paths[0].resolve().parents
