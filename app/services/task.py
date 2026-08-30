@@ -629,6 +629,50 @@ def get_video_materials(
     audio_duration,
     loomloom_video_request: loomloom.LoomLoomConfirmedVideoRequest | None = None,
 ):
+    product_images_prefix = (
+        getattr(params, "tv_product_images_prefix", "") or ""
+    ).strip()
+    if product_images_prefix:
+        logger.info(
+            "\n\n## fetching real TV product media from R2: "
+            f"prefix={product_images_prefix!r}"
+        )
+        from app.models.schema import MaterialInfo
+        from app.services import tv_product_media
+
+        method = getattr(params, "tv_product_media_method", "api") or "api"
+        try:
+            local_paths = tv_product_media.download_and_cache_product_media(
+                product_images_prefix, method=method
+            )
+        except tv_product_media.R2NotConfiguredError as exc:
+            _mark_task_failed(task_id, "materials", str(exc))
+            return None
+
+        if local_paths:
+            product_materials = video.preprocess_video(
+                materials=[
+                    MaterialInfo(provider="local", url=str(path), duration=0)
+                    for path in local_paths
+                ],
+                clip_duration=params.video_clip_duration,
+            )
+            if product_materials:
+                logger.success(
+                    f"using {len(product_materials)} real product media file(s) "
+                    f"from R2 (prefix={product_images_prefix!r})"
+                )
+                return [material_info.url for material_info in product_materials]
+            logger.warning(
+                f"R2 product media for prefix {product_images_prefix!r} failed "
+                "preprocessing; falling back to generic stock footage"
+            )
+        else:
+            logger.info(
+                f"no R2 product media found for prefix {product_images_prefix!r}; "
+                "falling back to generic stock footage"
+            )
+
     if params.video_source == "local":
         logger.info("\n\n## preprocess local materials")
         materials = video.preprocess_video(

@@ -271,6 +271,23 @@ Batch manifests:
         default="",
         help="framing for a multi-TV comparison, e.g. 'best for gaming under 800€'",
     )
+    content_group.add_argument(
+        "--tv-product-images-prefix",
+        default=None,
+        help=(
+            "R2 object-key prefix with this TV's real photos/videos (e.g. "
+            "'SAMSUNG_QN90D_55/'); auto-filled from the matched TVSpecs record "
+            "when a single --tv-review-specs entry sets product_images_prefix. "
+            "Falls back to --video-source stock footage when unset, blank, or "
+            "the prefix has no objects in the bucket."
+        ),
+    )
+    content_group.add_argument(
+        "--tv-product-media-method",
+        default=None,
+        choices=["api", "public_url"],
+        help="how to resolve --tv-product-images-prefix into files (default: api)",
+    )
 
     material_group = parser.add_argument_group("materials and pipeline")
     material_group.add_argument(
@@ -746,6 +763,8 @@ def _apply_tv_review_specs(args: argparse.Namespace) -> None:
         )
     if not (args.custom_system_prompt or "").strip():
         args.custom_system_prompt = TV_REVIEW_SYSTEM_PROMPT
+    if not (args.tv_product_images_prefix or "").strip() and len(specs_list) == 1:
+        args.tv_product_images_prefix = specs_list[0].product_images_prefix
 
 
 def build_video_params(args: argparse.Namespace) -> VideoParams:
@@ -789,6 +808,8 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         "paragraph_number",
         "video_script_prompt",
         "custom_system_prompt",
+        "tv_product_images_prefix",
+        "tv_product_media_method",
         "video_concat_mode",
         "video_transition_mode",
         "video_clip_duration",

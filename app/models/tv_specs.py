@@ -42,6 +42,12 @@ class TVSpecs(BaseModel):
     # Free-form source attribution (retailer name, API name, "manual"...),
     # useful for debugging / auditing which source produced this record.
     source: str = ""
+    # Cloudflare R2 object-key prefix holding this TV's real product
+    # photos/videos, e.g. "SAMSUNG_QN90D_55/" (see app.services.tv_product_media).
+    # Left blank until photos are uploaded; the pipeline falls back to
+    # generic stock footage whenever this is empty or the prefix has no
+    # objects.
+    product_images_prefix: str = ""
 
     def display_name(self) -> str:
         return f"{self.brand} {self.model} ({self.size_inches:g}\")".strip()

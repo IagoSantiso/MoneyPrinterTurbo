@@ -407,6 +407,28 @@ compute_type = "int8"
 # https = "http://127.0.0.1:1080"
 
 # =============================================================================
+# Cloudflare R2 — real TV product photos/videos / 电视实拍素材
+# =============================================================================
+# See app/services/tv_product_media.py and TVSpecs.product_images_prefix.
+# One bucket, one key prefix per TV model (e.g. "SAMSUNG_QN90D_55/"), files
+# named "01_...", "02_..." to control display order. Used by both the
+# review pipeline (reads) and scripts/upload_tv_assets.py (writes).
+
+[r2]
+# Dashboard: https://dash.cloudflare.com/ -> R2 -> Manage R2 API Tokens.
+# Scope the token to this bucket only (Object Read & Write if you'll also
+# run upload_tv_assets.py; Object Read only is enough for the pipeline).
+account_id = ""
+access_key_id = ""
+secret_access_key = ""
+bucket_name = ""
+
+# Only needed for the "public_url" resolution method (HEAD-probing
+# conventionally-named files instead of calling the S3 API). Leave empty
+# if you're using the default "api" method.
+public_base_url = ""
+
+# =============================================================================
 # TTS Providers / 语音合成服务
 # =============================================================================
 
