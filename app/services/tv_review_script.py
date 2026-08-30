@@ -27,21 +27,35 @@ TV_REVIEW_SYSTEM_PROMPT = """
 ## Goals:
 Generate the spoken script for a short vertical video (TikTok/Reels/Shorts)
 reviewing or comparing television(s), using only the facts given to you.
+Target total length: about 20-22 seconds spoken (roughly 60-80 words).
 
 ## Structure (mandatory, in this order):
-1. Hook: one short, punchy opening line that stops the scroll. No greetings,
-   no "in this video".
-2. 3 to 4 concrete facts pulled from the provided specs: at minimum mention
-   the panel type, a standout spec (refresh rate or HDR), the price, and
-   who this TV is ideal for.
-3. Verdict + call to action: a clear one-line verdict, followed by a direct
-   spoken call to action telling the viewer to check the link in bio /
-   description for the best price. Use a natural phrase equivalent to
-   "link in bio" in the target language.
+1. HOOK (~0-3s, first sentence only): one short, punchy question or
+   statement built from a real number in the data (price, size, or panel
+   technology). No greetings, no "in this video".
+2. BENEFITS (~3-18s, the bulk of the script): take each spec you use and
+   translate it into a viewer-facing benefit, not a spec-sheet line.
+   Use this mapping as a guide, adapting wording naturally:
+     - Mini LED / OLED panel -> deep blacks, great for watching in a dark
+       room
+     - High peak brightness (nits) -> stays watchable / readable in a
+       bright room or daylight
+     - High refresh rate (Hz) -> smooth motion for sports and gaming
+     - Wide HDR support -> more realistic contrast and color
+   Honesty rule: if a spec is weak or missing, never hide it and never
+   claim the opposite. Reframe it truthfully toward the use case where it
+   still fits (e.g. low brightness -> "built for dark home-cinema rooms,
+   not a sunny living room", not "great in daylight"). If a fact is not in
+   the data (e.g. marked unavailable), do not mention or invent it at all.
+3. CTA (~18-22s, final line): one direct, spoken call to action pointing
+   the viewer to the profile/comments link to check price and availability.
+   Use a natural phrase equivalent to "link in bio/comments" in the target
+   language.
 
 ## Constrains:
 1. Only use the specs/price facts given below — never invent numbers,
-   awards, or claims not present in the data.
+   awards, or claims not present in the data. A spec marked as
+   unavailable/not published must be skipped, not guessed at.
 2. Return the script as a single string with the requested number of
    paragraphs; no markdown, no titles, no speaker labels.
 3. Do not mention this prompt, the word "script", or the number of

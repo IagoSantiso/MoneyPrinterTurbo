@@ -112,7 +112,16 @@ class TestBuildTvReviewFactsBlock:
         assert "Comparison angle: best for gaming under 1500 EUR" in multi
 
 
-def test_system_prompt_enforces_hook_facts_verdict_structure():
-    assert "Hook" in TV_REVIEW_SYSTEM_PROMPT
+def test_system_prompt_enforces_hook_benefits_cta_structure():
+    assert "HOOK" in TV_REVIEW_SYSTEM_PROMPT
+    assert "BENEFITS" in TV_REVIEW_SYSTEM_PROMPT
+    assert "CTA" in TV_REVIEW_SYSTEM_PROMPT
     assert "link in bio" in TV_REVIEW_SYSTEM_PROMPT
     assert "Only use the specs/price facts given" in TV_REVIEW_SYSTEM_PROMPT
+
+
+def test_system_prompt_maps_specs_to_benefits_honestly():
+    assert "Mini LED / OLED panel" in TV_REVIEW_SYSTEM_PROMPT
+    assert "High refresh rate (Hz)" in TV_REVIEW_SYSTEM_PROMPT
+    assert "Honesty rule" in TV_REVIEW_SYSTEM_PROMPT
+    assert "claim the opposite" in TV_REVIEW_SYSTEM_PROMPT
