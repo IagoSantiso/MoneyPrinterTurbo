@@ -24,20 +24,17 @@ al subir el primer archivo con esa ruta.
 2. Verás un botón para subir archivos y otro para crear una carpeta antes
    de subir. Crea (o escribe al subir) la carpeta:
    **`XIAOMI_TV_F_PRO_43`**
-3. Dentro de esa carpeta, sube tus fotos **renombrándolas con un número
-   por delante** para controlar el orden en el vídeo:
-   - `01_pantalla.jpg` → primer plano, la pantalla encendida
-   - `02_diseno.jpg` → la tele de frente/perfil
-   - `03_panel.jpg` → detalle de bordes/panel
-   - `04_mando.jpg` → el mando a distancia
-   - (los que quieras, siguen el mismo patrón `05_`, `06_`...)
-4. Para renombrar antes de subir desde el móvil: mantén pulsada la foto en
-   tu galería → Renombrar (Android) o usa la app Archivos/Files (iPhone)
-   para renombrarla antes de seleccionarla en el selector de subida de
-   Cloudflare.
+3. Dentro de esa carpeta, sube tus fotos **tal cual las exporta el móvil**
+   (`IMG_2087.jpg`, `IMG_2088.jpg`...) — no hace falta renombrarlas. El
+   pipeline no depende de un orden fijo: cada foto se convierte en un clip
+   con su propio efecto de zoom (Ken Burns) y es el propio montaje el que
+   decide duración y transición de cada una para encajar con la duración
+   del guion. Si el nombre de archivo trae un número (como `IMG_2087`),
+   se usa igualmente como criterio de orden — así que fotos tomadas
+   seguidas con la cámara ya salen en un orden razonable sin que hagas nada.
 
 Cuando termines, la ruta completa de cada archivo debe verse así en el
-bucket: `XIAOMI_TV_F_PRO_43/01_pantalla.jpg`, etc.
+bucket: `XIAOMI_TV_F_PRO_43/IMG_2087.jpg`, etc.
 
 ## 3. Crear el token de API (para que el pipeline pueda leer las fotos)
 

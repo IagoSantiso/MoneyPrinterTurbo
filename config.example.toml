@@ -410,9 +410,10 @@ compute_type = "int8"
 # Cloudflare R2 — real TV product photos/videos / 电视实拍素材
 # =============================================================================
 # See app/services/tv_product_media.py and TVSpecs.product_images_prefix.
-# One bucket, one key prefix per TV model (e.g. "SAMSUNG_QN90D_55/"), files
-# named "01_...", "02_..." to control display order. Used by both the
-# review pipeline (reads) and scripts/upload_tv_assets.py (writes).
+# One bucket, one key prefix per TV model (e.g. "SAMSUNG_QN90D_55/"). Plain
+# camera filenames (IMG_2087.jpg...) are fine — a leading number, if any,
+# is used for ordering but isn't required. Used by both the review
+# pipeline (reads) and scripts/upload_tv_assets.py (writes).
 
 [r2]
 # Dashboard: https://dash.cloudflare.com/ -> R2 -> Manage R2 API Tokens.

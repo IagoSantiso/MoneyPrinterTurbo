@@ -11,12 +11,18 @@ the R2 prefix you want to use, e.g.:
 
     ~/tv-photos/
       SAMSUNG_QN90D_55/
-        01_screen.jpg
-        02_design.jpg
-        03_panel.jpg
+        IMG_2087.jpg
+        IMG_2088.jpg
+        IMG_2091.jpg
       LG_C4_55/
-        01_screen.jpg
-        02_remote.jpg
+        IMG_3001.jpg
+        IMG_3002.jpg
+
+Plain camera filenames work fine — no need to rename anything. A leading
+number in the filename (01_..., IMG_2087...) is used for ordering when
+present, but the pipeline doesn't depend on a fixed photo order: each
+photo gets its own Ken Burns clip and the video assembly step decides
+duration/transitions per clip to fit the generated script.
 
 Each subfolder is uploaded to R2 under that same key prefix (via boto3,
 same credentials as the pipeline's [r2] config in config.toml) and,

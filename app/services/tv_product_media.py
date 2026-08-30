@@ -2,8 +2,12 @@
 
 Each TV has a folder-like key prefix in one R2 bucket (e.g.
 ``SAMSUNG_QN90D_55/``), matching ``TVSpecs.product_images_prefix``. Inside
-that prefix, files are named with a numeric prefix that controls display
-order: ``01_screen.jpg``, ``02_design.jpg``, ``03_panel.jpg``...
+that prefix. Filenames don't need a special convention — plain camera
+exports (``IMG_2087.jpg``...) work fine, since a leading number (if any)
+is used for ordering but isn't required. The pipeline doesn't depend on a
+fixed photo order: each photo becomes its own Ken Burns clip and
+``combine_videos`` decides duration/transitions per clip to fit the
+script's length.
 
 Two ways to resolve a prefix into a list of downloadable files, both
 implemented here:
@@ -86,7 +90,8 @@ def _sort_key(object_key: str) -> tuple:
 
 def list_product_media_keys_via_api(prefix: str, app_config=None) -> list[str]:
     """Lists object keys under ``prefix`` via the R2 S3-compatible API,
-    sorted by their numeric filename prefix (01_, 02_, ...).
+    sorted by leading filename number when present (01_, IMG_2087, ...),
+    otherwise alphabetically — a convenience, not a requirement.
 
     Returns an empty list — never raises — for a blank prefix or a bucket
     with nothing under that prefix, so the caller can fall back to stock
