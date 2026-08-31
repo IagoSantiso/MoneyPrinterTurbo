@@ -403,6 +403,7 @@ upload_post_max_pending_tasks = 10
 [google_sheets]
 # Sheet ID: the long ID in the Sheet's URL, i.e. the part between /d/ and
 # /edit in https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit
+# e.g. sheet_id = "1pZwacg71HgZ313qftdzTD7xfiG6drAsaWDw20uiEOvI"
 sheet_id = ""
 # Worksheet/tab id — the "gid=..." URL parameter when that tab is
 # selected. 0 is the first tab (default), which is usually right.
@@ -420,31 +421,39 @@ credentials_path = ""
 cache_ttl_seconds = 60
 
 # Maps this project's TVSpecs fields to your Sheet's actual column
-# headers (row 1). The defaults below match this project's Sheet for
-# brand/model (see scripts/upload_tv_assets.py) — the rest are
-# best-effort guesses. Check them against your Sheet's real headers and
-# fix any that don't match; a wrong header just means that field falls
-# back to its default (blank/0), except brand/model/size_inches/
-# panel_type/refresh_rate_hz, which are required — a row missing one of
-# those is skipped and reported in the WebUI instead of breaking the
-# whole catalog load.
+# headers (row 1). The defaults below match the real header row confirmed
+# for this project's Sheet (2026-08-31) — if you're pointing this at a
+# different sheet, check these against its actual row 1 and fix whatever
+# doesn't match. A wrong/missing header just means that field falls back
+# to its default (blank/0), except brand/model/size_inches/panel_type/
+# refresh_rate_hz, which are required — a row missing one of those is
+# skipped and reported in the WebUI instead of breaking the whole catalog
+# load.
 [google_sheets.columns]
 brand = "Marca"
 model = "Modelo (comercial)"
-size_inches = "Tamaño (pulgadas)"
-panel_type = "Panel"
-refresh_rate_hz = "Frecuencia (Hz)"
-hdr = "HDR"
+size_inches = "Tamaño pantalla (pulgadas)"
+panel_type = "Tipo panel (LED/QLED/OLED/Mini-LED)"
+refresh_rate_hz = "Tasa de refresco (Hz)"
+hdr = "HDR (tipos soportados)"
 resolution = "Resolución"
-smart_platform = "Smart TV"
-price = "Precio"
-currency = "Moneda"
-ideal_for = "Ideal para"
-pros = "Pros"
-cons = "Contras"
-affiliate_url = "URL afiliado"
+smart_platform = "Smart TV / Sistema operativo"
+price = "Precio (€)"
+affiliate_url = "Enlace Amazon"
+# This sheet has no dedicated Pros/Cons/"ideal for"/currency columns —
+# left unmapped on purpose, so these stay at their TVSpecs defaults
+# (empty lists / "" / "EUR", which matches "Precio (€)" anyway). The
+# review script still works fine from raw specs alone (see
+# TV_REVIEW_SYSTEM_PROMPT's spec->benefit mapping) — add these columns to
+# the sheet and map them here later if you want more curated framing.
+currency = ""
+ideal_for = ""
+pros = ""
+cons = ""
+# Doesn't exist yet either — scripts/upload_tv_assets.py creates this
+# column automatically the first time you run it with --sheet-id.
 product_images_prefix = "product_images_prefix"
-source = "Fuente"
+source = ""
 
 # =============================================================================
 # Whisper Subtitles / Whisper 字幕

@@ -7,25 +7,20 @@ from app.services import tv_specs
 
 def _row(**overrides) -> dict:
     """A default row shaped like GoogleSheetTVSpecsProvider._fetch_rows_*
-    output (dict keyed by the default Spanish column headers), with
-    overrides applied on top."""
+    output (dict keyed by this project's real Sheet column headers,
+    confirmed 2026-08-31), with overrides applied on top."""
     row = {
         "Marca": "Samsung",
         "Modelo (comercial)": "QN90D 55",
-        "Tamaño (pulgadas)": "55",
-        "Panel": "Mini-LED QLED",
-        "Frecuencia (Hz)": "144",
-        "HDR": "HDR10+, HDR10, HLG",
+        "Tamaño pantalla (pulgadas)": "55",
+        "Tipo panel (LED/QLED/OLED/Mini-LED)": "Mini-LED QLED",
+        "Tasa de refresco (Hz)": "144",
+        "HDR (tipos soportados)": "HDR10+, HDR10, HLG",
         "Resolución": "4K",
-        "Smart TV": "Tizen",
-        "Precio": "1299",
-        "Moneda": "EUR",
-        "Ideal para": "gaming and bright rooms",
-        "Pros": "Mini-LED contrast | 144Hz",
-        "Contras": "Pricey | Tizen ads",
-        "URL afiliado": "https://example.com/samsung",
+        "Smart TV / Sistema operativo": "Tizen",
+        "Precio (€)": "1299",
+        "Enlace Amazon": "https://example.com/samsung",
         "product_images_prefix": "SAMSUNG_QN90D_55/",
-        "Fuente": "",
     }
     row.update(overrides)
     return row
@@ -42,14 +37,14 @@ class TestRowToSpecs:
         assert specs.size_inches == 55.0
         assert specs.refresh_rate_hz == 144
         assert specs.price == 1299.0
-        assert specs.pros == ["Mini-LED contrast", "144Hz"]
-        assert specs.cons == ["Pricey", "Tizen ads"]
+        assert specs.currency == "EUR"  # no dedicated column, default holds
+        assert specs.affiliate_url == "https://example.com/samsung"
         assert specs.product_images_prefix == "SAMSUNG_QN90D_55/"
         assert provider.row_errors == []
 
     def test_blank_price_becomes_none_not_zero(self):
         provider = tv_specs.GoogleSheetTVSpecsProvider(sheet_id="sheet-1")
-        specs = provider._row_to_specs(_row(**{"Precio": ""}), row_number=2)
+        specs = provider._row_to_specs(_row(**{"Precio (€)": ""}), row_number=2)
 
         assert specs is not None
         assert specs.price is None
@@ -57,7 +52,8 @@ class TestRowToSpecs:
     def test_decimal_comma_is_accepted(self):
         provider = tv_specs.GoogleSheetTVSpecsProvider(sheet_id="sheet-1")
         specs = provider._row_to_specs(
-            _row(**{"Tamaño (pulgadas)": "55,5", "Precio": "1299,90"}), row_number=2
+            _row(**{"Tamaño pantalla (pulgadas)": "55,5", "Precio (€)": "1299,90"}),
+            row_number=2,
         )
 
         assert specs is not None
@@ -76,7 +72,7 @@ class TestRowToSpecs:
     def test_non_numeric_size_skips_row_with_error_instead_of_raising(self):
         provider = tv_specs.GoogleSheetTVSpecsProvider(sheet_id="sheet-1")
         specs = provider._row_to_specs(
-            _row(**{"Tamaño (pulgadas)": "not-a-number"}), row_number=7
+            _row(**{"Tamaño pantalla (pulgadas)": "not-a-number"}), row_number=7
         )
 
         assert specs is None
@@ -95,6 +91,21 @@ class TestRowToSpecs:
 
         assert specs is not None
         assert specs.brand == "LG"
+
+    def test_pros_cons_parse_when_mapped_to_a_column(self):
+        # This sheet has no Pros/Cons columns by default (see
+        # DEFAULT_SHEET_COLUMN_MAP) — but the pipe-split still works once
+        # someone adds the columns and maps them.
+        provider = tv_specs.GoogleSheetTVSpecsProvider(
+            sheet_id="sheet-1",
+            column_map={"pros": "Pros", "cons": "Contras"},
+        )
+        row = _row(**{"Pros": "Mini-LED contrast | 144Hz", "Contras": "Pricey | Tizen ads"})
+        specs = provider._row_to_specs(row, row_number=2)
+
+        assert specs is not None
+        assert specs.pros == ["Mini-LED contrast", "144Hz"]
+        assert specs.cons == ["Pricey", "Tizen ads"]
 
 
 class TestLoadCachingAndRefresh:

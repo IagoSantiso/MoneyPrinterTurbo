@@ -129,32 +129,34 @@ class LocalJSONTVSpecsProvider(TVSpecsProvider):
         raise TVSpecsNotFoundError(f"no TV specs found for {brand} {model}")
 
 
-# TVSpecs fields the Sheet is expected to carry, mapped to a default guess
-# at the column header. "brand" and "model" match the header names
-# scripts/upload_tv_assets.py already looks for ("Marca" / "Modelo
-# (comercial)") in this project's sheet; the rest are best-effort guesses.
-# Override any of these under [google_sheets.columns] in config.toml to
-# match your actual header row — a field whose header isn't found is
-# simply left at its TVSpecs default (blank/0), except brand/model/
+# TVSpecs fields the Sheet is expected to carry, mapped to the column
+# header confirmed against this project's real Sheet (2026-08-31).
+# Override any of these under [google_sheets.columns] in config.toml if
+# you're pointing this at a different sheet — a field whose header isn't
+# found (or that's deliberately left blank below, like "currency", which
+# this sheet folds into "Precio (€)" instead of a separate column) is
+# simply left at its TVSpecs default (blank/0/"EUR"), except brand/model/
 # size_inches/panel_type/refresh_rate_hz, which are required by TVSpecs:
 # a row missing one of those is skipped (see GoogleSheetTVSpecsProvider).
 DEFAULT_SHEET_COLUMN_MAP: dict[str, str] = {
     "brand": "Marca",
     "model": "Modelo (comercial)",
-    "size_inches": "Tamaño (pulgadas)",
-    "panel_type": "Panel",
-    "refresh_rate_hz": "Frecuencia (Hz)",
-    "hdr": "HDR",
+    "size_inches": "Tamaño pantalla (pulgadas)",
+    "panel_type": "Tipo panel (LED/QLED/OLED/Mini-LED)",
+    "refresh_rate_hz": "Tasa de refresco (Hz)",
+    "hdr": "HDR (tipos soportados)",
     "resolution": "Resolución",
-    "smart_platform": "Smart TV",
-    "price": "Precio",
-    "currency": "Moneda",
-    "ideal_for": "Ideal para",
-    "pros": "Pros",
-    "cons": "Contras",
-    "affiliate_url": "URL afiliado",
+    "smart_platform": "Smart TV / Sistema operativo",
+    "price": "Precio (€)",
+    "currency": "",
+    "ideal_for": "",
+    "pros": "",
+    "cons": "",
+    "affiliate_url": "Enlace Amazon",
+    # Doesn't exist until scripts/upload_tv_assets.py creates it (the
+    # first time it's run with --sheet-id).
     "product_images_prefix": "product_images_prefix",
-    "source": "Fuente",
+    "source": "",
 }
 
 _REQUIRED_SHEET_FIELDS = ("brand", "model", "size_inches", "panel_type", "refresh_rate_hz")
