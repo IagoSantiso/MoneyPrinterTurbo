@@ -35,6 +35,8 @@ dependencies = [
     "litellm==1.86.2",
     "google-genai==2.11.0",
     "boto3>=1.43.83",
+    "gspread>=6.2.1",
+    "google-auth>=2.55.2",
 ]
 
 [project.optional-dependencies]

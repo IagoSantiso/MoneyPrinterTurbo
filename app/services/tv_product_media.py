@@ -231,3 +231,31 @@ def download_and_cache_product_media(
         f"under {prefix_cache_dir}"
     )
     return local_paths
+
+
+def clear_prefix_cache(prefix: str) -> bool:
+    """Deletes the local cache directory for one R2 prefix, if present.
+
+    ``download_and_cache_product_media`` only re-downloads a file when its
+    local path is missing, keyed by filename — so replacing a photo in R2
+    under the same filename (rather than adding a new one) serves the
+    stale cached copy until this is called. A brand-new prefix (a new TV
+    folder) never needs this: it's always a cache miss on its own.
+    Returns True if a cache directory existed and was removed.
+    """
+    import shutil
+
+    prefix = (prefix or "").strip()
+    if not prefix:
+        return False
+
+    cache_root = utils.storage_dir(
+        os.path.join("local_videos", "tv_product_media_cache"), create=False
+    )
+    prefix_cache_dir = Path(cache_root) / prefix.strip("/")
+    if not prefix_cache_dir.is_dir():
+        return False
+
+    shutil.rmtree(prefix_cache_dir)
+    logger.info(f"R2: cleared local cache for prefix {prefix!r}")
+    return True

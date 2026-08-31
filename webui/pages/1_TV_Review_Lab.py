@@ -37,7 +37,9 @@ from app.services.tv_review_script import (  # noqa: E402
     build_tv_review_facts_block,
     build_tv_review_subject,
 )
+from app.services import tv_product_media  # noqa: E402
 from app.services.tv_specs import (  # noqa: E402
+    GoogleSheetTVSpecsProvider,
     LocalJSONTVSpecsProvider,
     TVSpecsProvider,
 )
@@ -57,6 +59,9 @@ ANIMATION_METHOD_LABELS = {
 }
 
 
+GOOGLE_SHEETS_CFG = getattr(config, "google_sheets", {}) or {}
+
+
 @st.cache_data(show_spinner=False)
 def _discover_specs_files() -> list[str]:
     """Ficheros JSON/CSV disponibles bajo resource/tv_specs/, más recientes primero."""
@@ -66,13 +71,38 @@ def _discover_specs_files() -> list[str]:
     return [os.path.relpath(f, root_dir) for f in files]
 
 
-def _load_specs(path: str) -> tuple[list[TVSpecs], str]:
-    """Devuelve (specs, error). ``specs`` viene vacío si hubo error."""
+def _load_specs_from_file(path: str) -> tuple[list[TVSpecs], list[str], str]:
+    """Devuelve (specs, row_errors, error). ``specs`` viene vacío si hubo error."""
     try:
         provider: TVSpecsProvider = LocalJSONTVSpecsProvider(path)
-        return provider.list_all(), ""
+        return provider.list_all(), [], ""
     except Exception as exc:  # noqa: BLE001 - se muestra tal cual en la UI
-        return [], f"{type(exc).__name__}: {exc}"
+        return [], [], f"{type(exc).__name__}: {exc}"
+
+
+def _get_sheet_provider() -> GoogleSheetTVSpecsProvider:
+    """Una instancia por sesión de Streamlit, para que su caché con TTL
+    sobreviva entre reruns de la página (cada interacción reejecuta el
+    script) en vez de perderse y golpear la API de Sheets todo el rato."""
+    if "tv_lab_sheet_provider" not in st.session_state:
+        st.session_state["tv_lab_sheet_provider"] = GoogleSheetTVSpecsProvider(
+            sheet_id=GOOGLE_SHEETS_CFG.get("sheet_id", ""),
+            worksheet_gid=int(GOOGLE_SHEETS_CFG.get("worksheet_gid", 0) or 0),
+            credentials_path=GOOGLE_SHEETS_CFG.get("credentials_path", ""),
+            column_map=GOOGLE_SHEETS_CFG.get("columns"),
+            cache_ttl_seconds=float(GOOGLE_SHEETS_CFG.get("cache_ttl_seconds", 60) or 0),
+        )
+    return st.session_state["tv_lab_sheet_provider"]
+
+
+def _load_specs_from_sheet(force_refresh: bool) -> tuple[list[TVSpecs], list[str], str]:
+    """Devuelve (specs, row_errors, error). ``specs`` viene vacío si hubo error."""
+    provider = _get_sheet_provider()
+    try:
+        specs = provider.list_all(force_refresh=force_refresh)
+        return specs, list(provider.row_errors), ""
+    except Exception as exc:  # noqa: BLE001 - se muestra tal cual en la UI
+        return [], [], f"{type(exc).__name__}: {exc}"
 
 
 def _build_params(
@@ -163,24 +193,60 @@ st.caption(
 )
 
 with st.expander("Fuente de datos (catálogo de TVs)", expanded=False):
-    available_files = _discover_specs_files()
-    options = available_files or [DEFAULT_SPECS_FILE]
-    default_index = (
-        options.index(DEFAULT_SPECS_FILE) if DEFAULT_SPECS_FILE in options else 0
-    )
-    specs_file = st.selectbox(
-        "Fichero de specs (resource/tv_specs/)",
-        options=options,
-        index=default_index,
-        help="JSON/CSV con las TVs importadas del Google Sheet, ver app/services/tv_specs.py",
+    source_mode = st.radio(
+        "De dónde salen las TVs",
+        options=["sheet", "file"],
+        format_func=lambda k: {
+            "sheet": "📡 Google Sheet en vivo (recomendado)",
+            "file": "📄 Snapshot local (resource/tv_specs/*.json)",
+        }[k],
+        index=0 if GOOGLE_SHEETS_CFG.get("sheet_id") else 1,
+        help=(
+            "El snapshot local es un export manual: nunca ve cambios "
+            "hechos en el Sheet después de exportarlo, ni carpetas nuevas "
+            "en Cloudflare R2 hasta que alguien vuelva a exportar. El modo "
+            "'Sheet en vivo' lee el Sheet directamente en cada carga."
+        ),
     )
 
-specs, load_error = _load_specs(specs_file)
+    specs_file = None
+    if source_mode == "file":
+        available_files = _discover_specs_files()
+        options = available_files or [DEFAULT_SPECS_FILE]
+        default_index = (
+            options.index(DEFAULT_SPECS_FILE) if DEFAULT_SPECS_FILE in options else 0
+        )
+        specs_file = st.selectbox(
+            "Fichero de specs (resource/tv_specs/)",
+            options=options,
+            index=default_index,
+            help="JSON/CSV con las TVs importadas del Google Sheet, ver app/services/tv_specs.py",
+        )
+        specs, row_errors, load_error = _load_specs_from_file(specs_file)
+    else:
+        if not GOOGLE_SHEETS_CFG.get("sheet_id"):
+            st.error(
+                "Falta configurar [google_sheets] sheet_id en config.toml "
+                "(y, si el Sheet es privado, credentials_path — ver los "
+                "comentarios de config.example.toml)."
+            )
+            st.stop()
+        refresh_clicked = st.button("🔄 Refrescar ahora", key="tv_lab_refresh_sheet")
+        specs, row_errors, load_error = _load_specs_from_sheet(
+            force_refresh=refresh_clicked
+        )
+        ttl = GOOGLE_SHEETS_CFG.get("cache_ttl_seconds", 60)
+        st.caption(
+            f"Se recachea sola cada {ttl}s; usa el botón para forzarlo al momento."
+        )
+
 if load_error:
-    st.error(f"No se pudo leer {specs_file}: {load_error}")
+    st.error(f"No se pudo leer el catálogo de TVs: {load_error}")
     st.stop()
+for row_error in row_errors:
+    st.warning(f"Sheet: {row_error}")
 if not specs:
-    st.warning(f"{specs_file} no contiene ninguna TV.")
+    st.warning("El catálogo de TVs está vacío.")
     st.stop()
 
 label_by_specs = {s.display_name(): s for s in specs}
@@ -237,11 +303,31 @@ with col2:
 
 single_selected = selected_specs[0] if len(selected_specs) == 1 else None
 default_prefix = single_selected.product_images_prefix if single_selected else ""
-product_images_prefix = st.text_input(
-    "Prefijo de fotos en R2 (vacío = usar stock genérico)",
-    value=default_prefix,
-    help="Se auto-rellena desde el catálogo si eliges una sola TV con fotos subidas a R2.",
-)
+prefix_col, clear_cache_col = st.columns([4, 1])
+with prefix_col:
+    product_images_prefix = st.text_input(
+        "Prefijo de fotos en R2 (vacío = usar stock genérico)",
+        value=default_prefix,
+        help="Se auto-rellena desde el catálogo si eliges una sola TV con fotos subidas a R2.",
+    )
+with clear_cache_col:
+    st.write("")  # alinea el botón con el input de arriba
+    st.write("")
+    if st.button(
+        "🗑️ Vaciar caché",
+        disabled=not product_images_prefix.strip(),
+        help=(
+            "Solo hace falta si REEMPLAZASTE una foto en R2 manteniendo el "
+            "mismo nombre de archivo — una carpeta nueva o una foto nueva "
+            "ya se descargan solas, sin necesidad de este botón."
+        ),
+    ):
+        cleared = tv_product_media.clear_prefix_cache(product_images_prefix)
+        if cleared:
+            st.toast(f"Caché local de «{product_images_prefix}» vaciada.")
+        else:
+            st.toast(f"No había caché local para «{product_images_prefix}».")
+
 if animation_method == "wavespeed":
     st.info(
         "WaveSpeed cobra por foto animada (~0.10-0.15 USD con MiniMax H3). "

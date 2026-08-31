@@ -64,9 +64,14 @@ tls_verify = true
 # See app/services/tv_specs.py and app/services/tv_review_script.py, and the
 # cli.py --tv-review-specs / --tv-specs-file / --tv-comparison-angle flags.
 
-# Where TV specs records come from. Only "local_json" is implemented today
-# (a JSON or CSV file you maintain yourself). "scraping" and "affiliate_api"
-# are reserved names for a source to be decided and implemented later.
+# Where TV specs records come from. "local_json" (a JSON/CSV file you
+# maintain yourself, e.g. a one-off export of the Sheet) and
+# "google_sheets" (reads the [google_sheets] section below live, see
+# app.services.tv_specs.GoogleSheetTVSpecsProvider) are implemented.
+# "scraping" and "affiliate_api" are reserved names for a source to be
+# decided and implemented later. The WebUI's TV Review Lab page lets you
+# pick either "local_json" or "google_sheets" per session regardless of
+# this default.
 tv_review_specs_source = "local_json"
 
 # Path to the local_json backend's data file (JSON list or CSV).
@@ -383,6 +388,63 @@ upload_post_youtube_privacy_status = "public"
 # rejected.
 # Cross-post jobs run in the current process and are not resumed after restart.
 upload_post_max_pending_tasks = 10
+
+# =============================================================================
+# TV catalog: live Google Sheet source
+# =============================================================================
+# Live TV catalog straight from your Google Sheet — fixes "the UI doesn't
+# see my Sheet edits / new R2 folder", which the local_json snapshot
+# above can't by construction (it only knows what was last exported into
+# resource/tv_specs/*.json by hand). See
+# app.services.tv_specs.GoogleSheetTVSpecsProvider. Set
+# tv_review_specs_source = "google_sheets" above to make this the CLI
+# default too; the WebUI's TV Review Lab page can pick either regardless.
+
+[google_sheets]
+# Sheet ID: the long ID in the Sheet's URL, i.e. the part between /d/ and
+# /edit in https://docs.google.com/spreadsheets/d/<SHEET_ID>/edit
+sheet_id = ""
+# Worksheet/tab id — the "gid=..." URL parameter when that tab is
+# selected. 0 is the first tab (default), which is usually right.
+worksheet_gid = 0
+# Service account JSON key with at least Viewer access to the Sheet
+# (share the Sheet with the service account's own email address).
+# Same file format as --sheet-credentials in scripts/upload_tv_assets.py
+# — point both at the same file to read+write with one service account.
+# Leave blank to instead try the Sheet's public CSV export (works only if
+# it's shared as "Anyone with the link" or published to the web).
+credentials_path = ""
+# How long a read is cached before the next page load/refresh re-queries
+# the Sheet, in seconds. Lower = fresher but more Sheets API calls (each
+# WebUI widget interaction reruns the page).
+cache_ttl_seconds = 60
+
+# Maps this project's TVSpecs fields to your Sheet's actual column
+# headers (row 1). The defaults below match this project's Sheet for
+# brand/model (see scripts/upload_tv_assets.py) — the rest are
+# best-effort guesses. Check them against your Sheet's real headers and
+# fix any that don't match; a wrong header just means that field falls
+# back to its default (blank/0), except brand/model/size_inches/
+# panel_type/refresh_rate_hz, which are required — a row missing one of
+# those is skipped and reported in the WebUI instead of breaking the
+# whole catalog load.
+[google_sheets.columns]
+brand = "Marca"
+model = "Modelo (comercial)"
+size_inches = "Tamaño (pulgadas)"
+panel_type = "Panel"
+refresh_rate_hz = "Frecuencia (Hz)"
+hdr = "HDR"
+resolution = "Resolución"
+smart_platform = "Smart TV"
+price = "Precio"
+currency = "Moneda"
+ideal_for = "Ideal para"
+pros = "Pros"
+cons = "Contras"
+affiliate_url = "URL afiliado"
+product_images_prefix = "product_images_prefix"
+source = "Fuente"
 
 # =============================================================================
 # Whisper Subtitles / Whisper 字幕
