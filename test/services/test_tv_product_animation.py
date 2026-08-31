@@ -1,13 +1,39 @@
+import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 from app.services import tv_product_animation as tpa
+from app.utils import utils
 
 
 def _write_tiny_jpeg(path: Path) -> Path:
     # Not a real JPEG — animate_product_photo_with_wavespeed only needs
     # readable bytes; it never decodes the image locally.
     path.write_bytes(b"\xff\xd8\xff\xe0fake-jpeg-bytes")
+    return path
+
+
+def _write_real_clip_with_audio(path: Path) -> Path:
+    subprocess.run(
+        [
+            utils.get_ffmpeg_binary(),
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=duration=1:size=64x64:rate=10",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=1",
+            "-pix_fmt",
+            "yuv420p",
+            "-shortest",
+            str(path),
+        ],
+        capture_output=True,
+        check=True,
+    )
     return path
 
 
@@ -137,10 +163,13 @@ class TestAnimateProductPhotoWithWavespeed:
                 photo, prompt="test", duration=99, resolution="8k"
             )
         payload = mock_post.call_args.kwargs["json"]
-        assert payload["duration"] == 30  # clamped to Wan 3.0's platform max
-        assert payload["resolution"] == "720p"  # invalid value falls back to default
+        assert payload["duration"] == 15  # clamped to minimax-h3's platform max
+        assert payload["resolution"] == "480p"  # invalid value falls back to default
 
-    def test_disables_audio_field_for_the_configured_model(self, tmp_path):
+    def test_default_model_has_no_audio_field_to_disable(self, tmp_path):
+        # minimax-h3 (the default) always returns an audio track with no
+        # request-level toggle — muting happens after download instead
+        # (see test_downloads_output_on_success's audio-stripping check).
         photo = _write_tiny_jpeg(tmp_path / "photo.jpg")
         mock_response = MagicMock()
         mock_response.json.return_value = {"code": 400, "message": "rejected"}
@@ -148,6 +177,20 @@ class TestAnimateProductPhotoWithWavespeed:
             "app.services.material.requests.post", return_value=mock_response
         ) as mock_post:
             tpa.animate_product_photo_with_wavespeed(photo, prompt="test")
+        payload = mock_post.call_args.kwargs["json"]
+        assert "enable_audio" not in payload
+        assert "generate_audio" not in payload
+
+    def test_disables_audio_field_when_wan_model_id_used(self, tmp_path):
+        photo = _write_tiny_jpeg(tmp_path / "photo.jpg")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"code": 400, "message": "rejected"}
+        with patch("app.services.material.get_api_key", return_value="key-123"), patch(
+            "app.services.material.requests.post", return_value=mock_response
+        ) as mock_post:
+            tpa.animate_product_photo_with_wavespeed(
+                photo, prompt="test", model_id="alibaba/wan-3.0/image-to-video"
+            )
         payload = mock_post.call_args.kwargs["json"]
         assert payload["enable_audio"] is False
 
@@ -166,6 +209,31 @@ class TestAnimateProductPhotoWithWavespeed:
         payload = mock_post.call_args.kwargs["json"]
         assert payload["generate_audio"] is False
         assert "enable_audio" not in payload
+
+
+class TestStripAudioTrack:
+    def test_removes_audio_stream_from_a_real_clip(self, tmp_path):
+        clip = _write_real_clip_with_audio(tmp_path / "clip.mp4")
+
+        result = tpa._strip_audio_track(clip)
+
+        probe = subprocess.run(
+            [utils.get_ffmpeg_binary(), "-i", str(result)],
+            capture_output=True,
+            text=True,
+        )
+        assert "Audio:" not in probe.stderr
+        assert "Video:" in probe.stderr
+        assert not clip.exists()  # original (with audio) was replaced
+
+    def test_returns_original_path_when_ffmpeg_fails(self, tmp_path):
+        not_a_video = tmp_path / "not-a-video.mp4"
+        not_a_video.write_bytes(b"not actually a video file")
+
+        result = tpa._strip_audio_track(not_a_video)
+
+        assert result == not_a_video
+        assert not_a_video.exists()  # left untouched on failure
 
 
 class TestAnimateProductPhotos:

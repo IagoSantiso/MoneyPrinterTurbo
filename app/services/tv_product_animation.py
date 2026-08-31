@@ -18,21 +18,21 @@ the same request shape:
     }
     -> {"code": 200, "data": {"id": "...", "status": "created", "urls": {"get": "..."}}}
 
-Models tried, and their pricing tier on WaveSpeed's public model catalog
-(https://wavespeed.ai/api/models?search=..., base_price/discount_rate —
-the actual $ isn't exposed without running a real generation):
-  - bytedance/seedance-2.0-fast/image-to-video: duration 4-15s, audio
-    field "generate_audio". First real test: $1.44 for a 4s clip, poor
-    motion (camera mostly just orbited the product, no scene variety).
-    base_price 500000, discount 80%.
-  - alibaba/wan-3.0/image-to-video: duration 2-30s (much more headroom
-    for a longer, more varied single clip), audio field "enable_audio".
-    base_price 500000, discount 95% (highest discount in the catalog —
-    real $/clip still unconfirmed).
-  - wavespeed-ai/minimax-h3/image-to-video: lowest base_price in the
-    catalog (200000, discount 50%) — not yet integrated/tested here,
-    duration bounds unknown; probe with a validation-only request (see
-    the Seedance/Wan discovery method above) before wiring it in.
+Models compared with real paid generations, same product photo, ~6s each
+(see DEFAULT_IMAGE_TO_VIDEO_MODEL below for which one won):
+  - bytedance/seedance-2.0-fast/image-to-video: $1.44, 720p, weak motion
+    (mostly a static rotation, no scene variety). duration 4-15s.
+  - alibaba/wan-3.0/image-to-video: $0.57, 720p, good varied motion
+    (push-in -> orbit/parallax, following the prompt). duration 2-30s.
+  - wavespeed-ai/minimax-h3/image-to-video: $0.12, 480p, quality judged
+    "more than enough" for this use case. duration enum {3..15}. Always
+    returns an audio track (no request-level way to disable it) — handled
+    by unconditionally muting every generated clip after download, see
+    _strip_audio_track().
+Prices are per-clip at the duration tested, from WaveSpeed's own billing
+(not derived from the public catalog's base_price/discount_rate, which
+don't map cleanly to $ — see wavespeed.ai/api/models for that catalog if
+comparing further models).
 
 Then poll ``GET .../predictions/{id}/result`` (via the existing
 ``material._wait_for_wavespeed_prediction`` helper — same polling/retry
@@ -51,6 +51,7 @@ from __future__ import annotations
 import base64
 import mimetypes
 import os
+import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -58,29 +59,42 @@ from loguru import logger
 
 from app.utils import utils
 
-# alibaba/wan-3.0 is the current default: highest discount rate in
-# WaveSpeed's catalog, and 2-30s duration gives much more room for a
-# single varied clip than Seedance's 4-15s. Switch back to Seedance (or
-# add minimax-h3 here once its duration bounds are probed) by passing
-# model_id= explicitly or setting wavespeed_image_to_video_model.
-DEFAULT_IMAGE_TO_VIDEO_MODEL = "alibaba/wan-3.0/image-to-video"
+# wavespeed-ai/minimax-h3 is the current default after a 3-way real-money
+# comparison on the same product photo (6s each, all $ actually charged):
+#   - bytedance/seedance-2.0-fast/image-to-video: $1.44, 720p, weak motion
+#     (mostly a static rotation).
+#   - alibaba/wan-3.0/image-to-video:              $0.57, 720p, good varied
+#     motion (push-in -> orbit/parallax, per prompt).
+#   - wavespeed-ai/minimax-h3/image-to-video:       $0.12, 480p, quality
+#     judged "more than enough" for this use case — best $/clip by far.
+# Switch models by passing model_id= explicitly or setting
+# wavespeed_image_to_video_model in config.toml.
+DEFAULT_IMAGE_TO_VIDEO_MODEL = "wavespeed-ai/minimax-h3/image-to-video"
 DEFAULT_DURATION_SECONDS = 6
-DEFAULT_RESOLUTION = "720p"
-_ALLOWED_RESOLUTIONS = frozenset({"480p", "720p", "1080p", "4k"})
 
-# (min_duration, max_duration, audio_field_name_or_None). audio_field is
-# set to False in the payload so the clip's own generated audio never
-# overlaps the pipeline's voiceover track; None means the model doesn't
-# expose one (leave the field out entirely rather than guess a name).
+# (min_duration, max_duration, audio_field_name_or_None, allowed_resolutions,
+# default_resolution). audio_field is set to False in the payload so the
+# clip's own generated audio never overlaps the pipeline's voiceover track;
+# None means the model doesn't expose one. minimax-h3 always returns an
+# audio track regardless (no request-level toggle exists) — the actual
+# muting for that case happens after download, via _strip_audio_track(),
+# which every generated clip goes through unconditionally as a safety net
+# (also guards against any future model that ignores its own audio_field).
 _MODEL_PROFILES = {
-    "bytedance/seedance-2.0-fast/image-to-video": (4, 15, "generate_audio"),
-    "alibaba/wan-3.0/image-to-video": (2, 30, "enable_audio"),
+    "bytedance/seedance-2.0-fast/image-to-video": (
+        4, 15, "generate_audio", frozenset({"480p", "720p", "1080p", "4k"}), "720p",
+    ),
+    "alibaba/wan-3.0/image-to-video": (
+        2, 30, "enable_audio", frozenset({"480p", "720p", "1080p", "4k"}), "720p",
+    ),
     # duration is actually an enum {3..15}, not a free range; clamping to
     # this min/max still keeps requested values valid since they're all
-    # integers. No audio field — this model doesn't generate a soundtrack.
-    "wavespeed-ai/minimax-h3/image-to-video": (3, 15, None),
+    # integers.
+    "wavespeed-ai/minimax-h3/image-to-video": (
+        3, 15, None, frozenset({"480p", "768p"}), "480p",
+    ),
 }
-_DEFAULT_PROFILE = (4, 15, None)  # used for any model not listed above
+_DEFAULT_PROFILE = (4, 15, None, frozenset({"480p", "720p", "1080p", "4k"}), "720p")
 
 DEFAULT_ANIMATION_PROMPT_TEMPLATE = (
     "Professional commercial product video of a {brand} {model} television. "
@@ -108,7 +122,7 @@ def animate_product_photo_with_wavespeed(
     image_path: Path,
     prompt: str,
     duration: int = DEFAULT_DURATION_SECONDS,
-    resolution: str = DEFAULT_RESOLUTION,
+    resolution: str | None = None,
     model_id: str | None = None,
     video_aspect=None,
     app_config=None,
@@ -141,10 +155,10 @@ def animate_product_photo_with_wavespeed(
             cfg.get("wavespeed_image_to_video_model", "") or DEFAULT_IMAGE_TO_VIDEO_MODEL
         ).strip().strip("/")
 
-    min_duration, max_duration, audio_field = _MODEL_PROFILES.get(
-        model_id, _DEFAULT_PROFILE
+    min_duration, max_duration, audio_field, allowed_resolutions, default_resolution = (
+        _MODEL_PROFILES.get(model_id, _DEFAULT_PROFILE)
     )
-    resolution = resolution if resolution in _ALLOWED_RESOLUTIONS else DEFAULT_RESOLUTION
+    resolution = resolution if resolution in allowed_resolutions else default_resolution
     duration = max(min_duration, min(int(duration or DEFAULT_DURATION_SECONDS), max_duration))
     mime_type = mimetypes.guess_type(str(image_path))[0] or "image/jpeg"
     image_data_uri = (
@@ -268,11 +282,55 @@ def animate_product_photo_with_wavespeed(
         )
         return None
 
+    local_path = _strip_audio_track(Path(local_path))
+
     logger.success(
         f"animated product photo: {image_path.name} -> {local_path} "
         f"(id={prediction_id})"
     )
-    return Path(local_path)
+    return local_path
+
+
+def _strip_audio_track(video_path: Path) -> Path:
+    """Removes any audio stream from a generated clip, unconditionally.
+
+    Some models let us ask for no audio at generation time (audio_field
+    above); others (minimax-h3) always return one regardless, with no
+    request-level toggle. Either way, the pipeline replaces this clip's
+    audio with the voiceover track at the final mux step
+    (video.generate_video()'s ``video_clip.with_audio(audio_clip)``), so a
+    leftover audio stream here serves no purpose — and mixing clips with
+    and without audio into the same ffmpeg concat (combine_videos()) risks
+    stream mismatches. Stripping is a fast ``-c copy`` remux, not a
+    re-encode. Returns the original path unchanged if ffmpeg fails or the
+    clip already has no audio — never raises.
+    """
+    muted_path = video_path.with_name(f"{video_path.stem}_noaudio{video_path.suffix}")
+    command = [
+        utils.get_ffmpeg_binary(),
+        "-y",
+        "-i",
+        str(video_path),
+        "-c",
+        "copy",
+        "-an",
+        str(muted_path),
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except Exception as exc:
+        logger.warning(f"failed to strip audio from {video_path.name}: {exc}")
+        return video_path
+
+    if result.returncode != 0 or not muted_path.exists():
+        logger.warning(
+            f"failed to strip audio from {video_path.name}: "
+            f"{(result.stderr or '').strip()}"
+        )
+        return video_path
+
+    video_path.unlink(missing_ok=True)
+    return muted_path
 
 
 def animate_product_photos(
@@ -280,7 +338,7 @@ def animate_product_photos(
     brand: str,
     model: str,
     duration: int = DEFAULT_DURATION_SECONDS,
-    resolution: str = DEFAULT_RESOLUTION,
+    resolution: str | None = None,
     model_id: str | None = None,
     app_config=None,
 ) -> list[Path]:
