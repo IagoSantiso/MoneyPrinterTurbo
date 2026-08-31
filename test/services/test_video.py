@@ -1,5 +1,6 @@
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 import types
@@ -1248,6 +1249,66 @@ class TestMaterialResolutionTolerance(unittest.TestCase):
 
     def test_rejects_genuinely_low_resolution_material(self):
         self.assertFalse(vd.is_material_resolution_acceptable(320, 240))
+
+
+class TestTruncatedOutputGuard(unittest.TestCase):
+    """_assert_output_not_truncated must catch an encode that stops early
+    while the container's own duration metadata still looks correct —
+    that combination shipped a video whose audio played in full over a
+    frozen frame after only a few real seconds of decoded video.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp_dir = tempfile.mkdtemp()
+        cls.short_clip = os.path.join(cls.tmp_dir, "short.mp4")
+        subprocess.run(
+            [
+                utils.get_ffmpeg_binary(),
+                "-y",
+                "-f",
+                "lavfi",
+                "-i",
+                "testsrc=duration=2:size=320x240:rate=10",
+                "-pix_fmt",
+                "yuv420p",
+                cls.short_clip,
+            ],
+            capture_output=True,
+            check=True,
+        )
+
+    @classmethod
+    def tearDownClass(cls):
+        shutil.rmtree(cls.tmp_dir, ignore_errors=True)
+
+    def test_probe_reports_the_real_decoded_duration(self):
+        duration = vd._probe_decoded_video_duration(self.short_clip)
+        self.assertAlmostEqual(duration, 2.0, delta=0.3)
+
+    def test_probe_returns_zero_for_a_missing_file(self):
+        duration = vd._probe_decoded_video_duration(
+            os.path.join(self.tmp_dir, "does-not-exist.mp4")
+        )
+        self.assertEqual(duration, 0.0)
+
+    def test_passes_when_output_matches_expected_duration(self):
+        # Should not raise.
+        vd._assert_output_not_truncated(self.short_clip, expected_duration=2.0)
+
+    def test_raises_when_output_is_shorter_than_expected(self):
+        # Simulates the real bug: something (a container claiming 33.73s
+        # while only 3.8s actually decode) expected far more video than
+        # what actually plays back.
+        with self.assertRaises(RuntimeError) as ctx:
+            vd._assert_output_not_truncated(self.short_clip, expected_duration=30.0)
+        self.assertIn("truncated", str(ctx.exception))
+
+    def test_skips_check_when_probe_cannot_run(self):
+        # A probe failure (missing ffmpeg, unreadable file) must not fail
+        # the task over a diagnostic that couldn't execute.
+        with patch.object(vd, "_probe_decoded_video_duration", return_value=0.0):
+            vd._assert_output_not_truncated(self.short_clip, expected_duration=30.0)
 
 
 if __name__ == "__main__":
