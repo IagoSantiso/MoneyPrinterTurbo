@@ -128,6 +128,27 @@ class VideoParams(BaseModel):
     video_script_prompt: str = Field(default="", max_length=2000)
     custom_system_prompt: str = Field(default="", max_length=8000)
 
+    # Cloudflare R2 key prefix holding this TV's real product photos/videos
+    # (see app.services.tv_product_media). When set and non-empty after
+    # resolution, get_video_materials() uses these instead of generic stock
+    # footage; falls back to the configured video_source automatically when
+    # the prefix is blank or has no objects.
+    tv_product_images_prefix: str = ""
+    # "api" (R2 S3-compatible API, needs credentials) or "public_url"
+    # (HEAD-probe a public bucket domain). See tv_product_media.py.
+    tv_product_media_method: str = "api"
+    # "ken_burns" (v1, default): pan/zoom over the static photo, free, no
+    # network dependency. "wavespeed" (v2): animate each product photo into
+    # a short AI-generated clip via WaveSpeed's Seedance image-to-video
+    # model (paid per clip) — see app/services/tv_product_animation.py.
+    # A photo that fails to animate falls back to ken_burns automatically.
+    tv_product_animation_method: str = "ken_burns"
+    # Brand/model fed into the WaveSpeed animation prompt when
+    # tv_product_animation_method="wavespeed"; auto-filled by the CLI from
+    # the matched TVSpecs record for a single --tv-review-specs entry.
+    tv_product_animation_brand: str = ""
+    tv_product_animation_model: str = ""
+
 
 class SubtitleRequest(BaseModel):
     video_script: str
