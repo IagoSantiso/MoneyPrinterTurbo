@@ -137,8 +137,35 @@ class TestAnimateProductPhotoWithWavespeed:
                 photo, prompt="test", duration=99, resolution="8k"
             )
         payload = mock_post.call_args.kwargs["json"]
-        assert payload["duration"] == 15  # clamped to platform max
+        assert payload["duration"] == 30  # clamped to Wan 3.0's platform max
         assert payload["resolution"] == "720p"  # invalid value falls back to default
+
+    def test_disables_audio_field_for_the_configured_model(self, tmp_path):
+        photo = _write_tiny_jpeg(tmp_path / "photo.jpg")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"code": 400, "message": "rejected"}
+        with patch("app.services.material.get_api_key", return_value="key-123"), patch(
+            "app.services.material.requests.post", return_value=mock_response
+        ) as mock_post:
+            tpa.animate_product_photo_with_wavespeed(photo, prompt="test")
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["enable_audio"] is False
+
+    def test_uses_seedance_audio_field_when_model_id_overridden(self, tmp_path):
+        photo = _write_tiny_jpeg(tmp_path / "photo.jpg")
+        mock_response = MagicMock()
+        mock_response.json.return_value = {"code": 400, "message": "rejected"}
+        with patch("app.services.material.get_api_key", return_value="key-123"), patch(
+            "app.services.material.requests.post", return_value=mock_response
+        ) as mock_post:
+            tpa.animate_product_photo_with_wavespeed(
+                photo,
+                prompt="test",
+                model_id="bytedance/seedance-2.0-fast/image-to-video",
+            )
+        payload = mock_post.call_args.kwargs["json"]
+        assert payload["generate_audio"] is False
+        assert "enable_audio" not in payload
 
 
 class TestAnimateProductPhotos:

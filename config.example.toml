@@ -114,7 +114,7 @@ wavespeed_api_keys = []
 # camera-style motion (see app/services/tv_product_animation.py — the TV
 # review "v2" pipeline). Shares wavespeed_api_keys above. Platform accepts
 # 4-15s and 480p/720p/1080p/4k regardless of the text-to-video bounds above.
-# wavespeed_image_to_video_model = "bytedance/seedance-2.0-fast/image-to-video"
+# wavespeed_image_to_video_model = "alibaba/wan-3.0/image-to-video"
 
 # Volcano Engine Ark Seedance uses the official asynchronous video-generation API.
 # Create an Ark API key at:
