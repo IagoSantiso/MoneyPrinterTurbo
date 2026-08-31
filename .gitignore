@@ -1,6 +1,11 @@
 .DS_Store
 /config.toml
 /config.toml.bak
+# Google service account keys (Sheets read access, see [google_sheets] in
+# config.example.toml). Never commit these — put yours anywhere under this
+# folder and point [google_sheets] credentials_path at it in your local
+# (gitignored) config.toml.
+/credentials/
 /storage/
 /.idea/
 /app/services/__pycache__

@@ -406,7 +406,10 @@ upload_post_max_pending_tasks = 10
 # e.g. sheet_id = "1pZwacg71HgZ313qftdzTD7xfiG6drAsaWDw20uiEOvI"
 sheet_id = ""
 # Worksheet/tab id — the "gid=..." URL parameter when that tab is
-# selected. 0 is the first tab (default), which is usually right.
+# selected. 0 does NOT reliably mean "the first/only tab" (it's whichever
+# tab Sheets happened to create first internally, which a renamed or
+# reordered tab doesn't change) — always check the real value from the
+# URL, or list it yourself: `gc.open_by_key(sheet_id).worksheets()`.
 worksheet_gid = 0
 # Service account JSON key with at least Viewer access to the Sheet
 # (share the Sheet with the service account's own email address).
@@ -414,6 +417,8 @@ worksheet_gid = 0
 # — point both at the same file to read+write with one service account.
 # Leave blank to instead try the Sheet's public CSV export (works only if
 # it's shared as "Anyone with the link" or published to the web).
+# NEVER commit this file. Put it anywhere under ./credentials/ (already
+# gitignored), e.g. credentials_path = "credentials/google-sheets.json"
 credentials_path = ""
 # How long a read is cached before the next page load/refresh re-queries
 # the Sheet, in seconds. Lower = fresher but more Sheets API calls (each
