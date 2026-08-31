@@ -650,6 +650,25 @@ def get_video_materials(
             return None
 
         if local_paths:
+            animation_method = (
+                getattr(params, "tv_product_animation_method", "ken_burns")
+                or "ken_burns"
+            )
+            if animation_method == "wavespeed":
+                from pathlib import Path as _Path
+
+                from app.services import tv_product_animation
+
+                logger.info(
+                    "\n\n## animating product photos with WaveSpeed "
+                    f"(v2): {len(local_paths)} photo(s)"
+                )
+                local_paths = tv_product_animation.animate_product_photos(
+                    photo_paths=[_Path(p) for p in local_paths],
+                    brand=getattr(params, "tv_product_animation_brand", "") or "",
+                    model=getattr(params, "tv_product_animation_model", "") or "",
+                )
+
             product_materials = video.preprocess_video(
                 materials=[
                     MaterialInfo(provider="local", url=str(path), duration=0)

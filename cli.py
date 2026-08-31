@@ -288,6 +288,35 @@ Batch manifests:
         choices=["api", "public_url"],
         help="how to resolve --tv-product-images-prefix into files (default: api)",
     )
+    content_group.add_argument(
+        "--tv-product-animation-method",
+        default=None,
+        choices=["ken_burns", "wavespeed"],
+        help=(
+            "how to turn each R2 product photo into a video clip (default: "
+            "ken_burns, free pan/zoom). 'wavespeed' generates a short "
+            "AI camera-motion clip per photo via WaveSpeed's Seedance "
+            "image-to-video model (paid per clip; requires "
+            "wavespeed_api_keys in config.toml); a photo that fails to "
+            "animate falls back to ken_burns automatically."
+        ),
+    )
+    content_group.add_argument(
+        "--tv-product-animation-brand",
+        default=None,
+        help=(
+            "brand fed into the WaveSpeed animation prompt; auto-filled from "
+            "the matched TVSpecs record for a single --tv-review-specs entry"
+        ),
+    )
+    content_group.add_argument(
+        "--tv-product-animation-model",
+        default=None,
+        help=(
+            "model name fed into the WaveSpeed animation prompt; auto-filled "
+            "from the matched TVSpecs record for a single --tv-review-specs entry"
+        ),
+    )
 
     material_group = parser.add_argument_group("materials and pipeline")
     material_group.add_argument(
@@ -765,6 +794,10 @@ def _apply_tv_review_specs(args: argparse.Namespace) -> None:
         args.custom_system_prompt = TV_REVIEW_SYSTEM_PROMPT
     if not (args.tv_product_images_prefix or "").strip() and len(specs_list) == 1:
         args.tv_product_images_prefix = specs_list[0].product_images_prefix
+    if not (args.tv_product_animation_brand or "").strip() and len(specs_list) == 1:
+        args.tv_product_animation_brand = specs_list[0].brand
+    if not (args.tv_product_animation_model or "").strip() and len(specs_list) == 1:
+        args.tv_product_animation_model = specs_list[0].model
 
 
 def build_video_params(args: argparse.Namespace) -> VideoParams:
@@ -810,6 +843,9 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         "custom_system_prompt",
         "tv_product_images_prefix",
         "tv_product_media_method",
+        "tv_product_animation_method",
+        "tv_product_animation_brand",
+        "tv_product_animation_model",
         "video_concat_mode",
         "video_transition_mode",
         "video_clip_duration",

@@ -137,6 +137,17 @@ class VideoParams(BaseModel):
     # "api" (R2 S3-compatible API, needs credentials) or "public_url"
     # (HEAD-probe a public bucket domain). See tv_product_media.py.
     tv_product_media_method: str = "api"
+    # "ken_burns" (v1, default): pan/zoom over the static photo, free, no
+    # network dependency. "wavespeed" (v2): animate each product photo into
+    # a short AI-generated clip via WaveSpeed's Seedance image-to-video
+    # model (paid per clip) — see app/services/tv_product_animation.py.
+    # A photo that fails to animate falls back to ken_burns automatically.
+    tv_product_animation_method: str = "ken_burns"
+    # Brand/model fed into the WaveSpeed animation prompt when
+    # tv_product_animation_method="wavespeed"; auto-filled by the CLI from
+    # the matched TVSpecs record for a single --tv-review-specs entry.
+    tv_product_animation_brand: str = ""
+    tv_product_animation_model: str = ""
 
 
 class SubtitleRequest(BaseModel):
