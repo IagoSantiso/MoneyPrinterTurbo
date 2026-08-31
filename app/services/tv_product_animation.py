@@ -75,6 +75,10 @@ _ALLOWED_RESOLUTIONS = frozenset({"480p", "720p", "1080p", "4k"})
 _MODEL_PROFILES = {
     "bytedance/seedance-2.0-fast/image-to-video": (4, 15, "generate_audio"),
     "alibaba/wan-3.0/image-to-video": (2, 30, "enable_audio"),
+    # duration is actually an enum {3..15}, not a free range; clamping to
+    # this min/max still keeps requested values valid since they're all
+    # integers. No audio field — this model doesn't generate a soundtrack.
+    "wavespeed-ai/minimax-h3/image-to-video": (3, 15, None),
 }
 _DEFAULT_PROFILE = (4, 15, None)  # used for any model not listed above
 
