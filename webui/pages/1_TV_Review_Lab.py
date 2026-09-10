@@ -138,6 +138,17 @@ def _build_params(
     return params
 
 
+def _render_task_logs(task_id: str) -> None:
+    """Logs crudos del task (incluye qué modelo de WaveSpeed animó cada
+    foto: busca líneas 'animating product photo with WaveSpeed: model=...').
+    """
+    log_records = webui_task.get_task_logs(task_id)
+    if not log_records:
+        return
+    with st.expander("📜 Logs", expanded=False):
+        st.code("\n".join(log_records))
+
+
 def _render_task_result(task_id: str, label: str) -> bool:
     """Renderiza el estado/resultado de un task_id ya conocido.
 
@@ -154,17 +165,20 @@ def _render_task_result(task_id: str, label: str) -> bool:
 
     if state == const.TASK_STATE_PROCESSING:
         st.progress(progress, text=f"Generando «{label}»… {progress}%")
+        _render_task_logs(task_id)
         return True
 
     if state == const.TASK_STATE_FAILED:
         error = str(task.get("error") or "").strip()
         stage = task.get("failed_stage", "unknown")
         st.error(f"Falló en la etapa «{stage}»: {error or 'error desconocido'}")
+        _render_task_logs(task_id)
         return False
 
     video_files = task.get("videos") or []
     if state != const.TASK_STATE_COMPLETE or not video_files:
         st.error("La generación terminó sin producir ningún vídeo.")
+        _render_task_logs(task_id)
         return False
 
     st.success(f"Vídeo listo para «{label}»")
@@ -181,6 +195,7 @@ def _render_task_result(task_id: str, label: str) -> bool:
                     mime="video/mp4",
                     key=f"tv_lab_download_{task_id}_{i}",
                 )
+    _render_task_logs(task_id)
     return False
 
 
