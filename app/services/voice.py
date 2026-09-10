@@ -694,6 +694,20 @@ def create_edge_tts_communicate(
     if "boundary" in communicate_signature.parameters:
         communicate_kwargs["boundary"] = "WordBoundary"
 
+    # edge_tts 使用 aiohttp 直连 speech.platform.bing.com，不会像 requests 那样
+    # 自动读取 HTTPS_PROXY 环境变量，因此在受限网络（如公司代理、沙箱环境）中会
+    # 直接超时。这里复用项目已有的 [proxy] 配置（material.py/volcengine_seedance.py
+    # 同样读取该配置），保持整个项目对同一个代理设置的行为一致。
+    if "proxy" in communicate_signature.parameters:
+        proxy_url = (
+            config.proxy.get("https")
+            or config.proxy.get("http")
+            or os.environ.get("HTTPS_PROXY")
+            or os.environ.get("https_proxy")
+        )
+        if proxy_url:
+            communicate_kwargs["proxy"] = proxy_url
+
     return edge_tts.Communicate(text, voice_name, **communicate_kwargs)
 
 

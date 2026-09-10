@@ -1471,6 +1471,40 @@ class TestElevenLabsVoice(unittest.TestCase):
         )
 
 
+class TestCreateEdgeTtsCommunicateProxy(unittest.TestCase):
+    """edge_tts uses aiohttp directly against speech.platform.bing.com and,
+    unlike requests, does not read HTTPS_PROXY on its own — so behind a
+    corporate/sandboxed proxy it hangs until timeout instead of erroring
+    immediately. create_edge_tts_communicate must forward a proxy URL from
+    either config.toml's [proxy] section or the standard env vars.
+    """
+
+    def test_uses_config_proxy_when_set(self):
+        with patch.object(vs.config, "proxy", {"https": "http://cfg-proxy:1234"}):
+            with patch.object(vs.edge_tts, "Communicate", autospec=True) as mock_communicate:
+                vs.create_edge_tts_communicate("hello", "en-US-GuyNeural", "+0%")
+        _, kwargs = mock_communicate.call_args
+        self.assertEqual(kwargs.get("proxy"), "http://cfg-proxy:1234")
+
+    def test_falls_back_to_https_proxy_env_var(self):
+        with patch.object(vs.config, "proxy", {}):
+            with patch.dict(
+                os.environ, {"HTTPS_PROXY": "http://env-proxy:5678"}, clear=False
+            ):
+                with patch.object(vs.edge_tts, "Communicate", autospec=True) as mock_communicate:
+                    vs.create_edge_tts_communicate("hello", "en-US-GuyNeural", "+0%")
+        _, kwargs = mock_communicate.call_args
+        self.assertEqual(kwargs.get("proxy"), "http://env-proxy:5678")
+
+    def test_no_proxy_kwarg_when_nothing_configured(self):
+        with patch.object(vs.config, "proxy", {}):
+            with patch.dict(os.environ, {}, clear=True):
+                with patch.object(vs.edge_tts, "Communicate", autospec=True) as mock_communicate:
+                    vs.create_edge_tts_communicate("hello", "en-US-GuyNeural", "+0%")
+        _, kwargs = mock_communicate.call_args
+        self.assertNotIn("proxy", kwargs)
+
+
 if __name__ == "__main__":
     # python -m unittest test.services.test_voice.TestVoiceService.test_azure_tts_v1
     # python -m unittest test.services.test_voice.TestVoiceService.test_azure_tts_v2

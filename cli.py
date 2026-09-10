@@ -248,6 +248,75 @@ Batch manifests:
         default=None,
         help="replace the default LLM system prompt for script generation",
     )
+    content_group.add_argument(
+        "--tv-review-specs",
+        default="",
+        metavar="BRAND:MODEL[,BRAND:MODEL...]",
+        help=(
+            "one or more 'Brand:Model' pairs looked up in --tv-specs-file; switches "
+            "script generation to the TV reviewer/comparison variant (hook + specs "
+            "facts + verdict/CTA) instead of a free-text --video-subject. Sets "
+            "video_subject, video_script_prompt, and custom_system_prompt unless you "
+            "already passed those explicitly."
+        ),
+    )
+    content_group.add_argument(
+        "--tv-specs-file",
+        default="resource/tv_specs/example.json",
+        metavar="PATH",
+        help="JSON or CSV file of TV specs records read by --tv-review-specs",
+    )
+    content_group.add_argument(
+        "--tv-comparison-angle",
+        default="",
+        help="framing for a multi-TV comparison, e.g. 'best for gaming under 800€'",
+    )
+    content_group.add_argument(
+        "--tv-product-images-prefix",
+        default=None,
+        help=(
+            "R2 object-key prefix with this TV's real photos/videos (e.g. "
+            "'SAMSUNG_QN90D_55/'); auto-filled from the matched TVSpecs record "
+            "when a single --tv-review-specs entry sets product_images_prefix. "
+            "Falls back to --video-source stock footage when unset, blank, or "
+            "the prefix has no objects in the bucket."
+        ),
+    )
+    content_group.add_argument(
+        "--tv-product-media-method",
+        default=None,
+        choices=["api", "public_url"],
+        help="how to resolve --tv-product-images-prefix into files (default: api)",
+    )
+    content_group.add_argument(
+        "--tv-product-animation-method",
+        default=None,
+        choices=["ken_burns", "wavespeed"],
+        help=(
+            "how to turn each R2 product photo into a video clip (default: "
+            "ken_burns, free pan/zoom). 'wavespeed' generates a short "
+            "AI camera-motion clip per photo via WaveSpeed's Seedance "
+            "image-to-video model (paid per clip; requires "
+            "wavespeed_api_keys in config.toml); a photo that fails to "
+            "animate falls back to ken_burns automatically."
+        ),
+    )
+    content_group.add_argument(
+        "--tv-product-animation-brand",
+        default=None,
+        help=(
+            "brand fed into the WaveSpeed animation prompt; auto-filled from "
+            "the matched TVSpecs record for a single --tv-review-specs entry"
+        ),
+    )
+    content_group.add_argument(
+        "--tv-product-animation-model",
+        default=None,
+        help=(
+            "model name fed into the WaveSpeed animation prompt; auto-filled "
+            "from the matched TVSpecs record for a single --tv-review-specs entry"
+        ),
+    )
 
     material_group = parser.add_argument_group("materials and pipeline")
     material_group.add_argument(
@@ -535,8 +604,14 @@ Batch manifests:
         not args.batch_file
         and not args.video_subject.strip()
         and not args.video_script.strip()
+        and not args.tv_review_specs.strip()
     ):
-        parser.error("one of --video-subject or --video-script is required")
+        parser.error(
+            "one of --video-subject, --video-script, or --tv-review-specs is required"
+        )
+
+    if not args.batch_file and args.tv_review_specs.strip():
+        _apply_tv_review_specs(args)
 
     if not args.batch_file and args.video_source == "local" and args.stop_at == "terms":
         parser.error(
@@ -678,6 +753,53 @@ def _resolve_voice_name(args: argparse.Namespace, ui_config) -> str:
     return _ui_config_value(ui_config, "voice_name", str) or DEFAULT_VOICE_NAME
 
 
+def _apply_tv_review_specs(args: argparse.Namespace) -> None:
+    """Resolves --tv-review-specs into video_subject/video_script_prompt/
+    custom_system_prompt, mutating args in place before build_video_params
+    runs. Explicit --video-subject/--video-script-prompt/--custom-system-prompt
+    values are left untouched if the user already set them.
+    """
+    # Imported lazily, same reasoning as build_video_params: avoid pulling in
+    # app.config (and its startup logging) for plain --help invocations.
+    from app.services.tv_review_script import (
+        build_tv_review_facts_block,
+        build_tv_review_subject,
+        TV_REVIEW_SYSTEM_PROMPT,
+    )
+    from app.services.tv_specs import LocalJSONTVSpecsProvider, TVSpecsNotFoundError
+
+    provider = LocalJSONTVSpecsProvider(args.tv_specs_file)
+    specs_list = []
+    for pair in args.tv_review_specs.split(","):
+        pair = pair.strip()
+        if not pair:
+            continue
+        if ":" not in pair:
+            raise SystemExit(
+                f"--tv-review-specs entry {pair!r} must be formatted as 'Brand:Model'"
+            )
+        brand, model = (part.strip() for part in pair.split(":", 1))
+        try:
+            specs_list.append(provider.fetch(brand, model))
+        except TVSpecsNotFoundError as e:
+            raise SystemExit(str(e)) from e
+
+    if not args.video_subject.strip():
+        args.video_subject = build_tv_review_subject(specs_list)
+    if not (args.video_script_prompt or "").strip():
+        args.video_script_prompt = build_tv_review_facts_block(
+            specs_list, args.tv_comparison_angle
+        )
+    if not (args.custom_system_prompt or "").strip():
+        args.custom_system_prompt = TV_REVIEW_SYSTEM_PROMPT
+    if not (args.tv_product_images_prefix or "").strip() and len(specs_list) == 1:
+        args.tv_product_images_prefix = specs_list[0].product_images_prefix
+    if not (args.tv_product_animation_brand or "").strip() and len(specs_list) == 1:
+        args.tv_product_animation_brand = specs_list[0].brand
+    if not (args.tv_product_animation_model or "").strip() and len(specs_list) == 1:
+        args.tv_product_animation_model = specs_list[0].model
+
+
 def build_video_params(args: argparse.Namespace) -> VideoParams:
     # 参数帮助和校验不需要加载应用配置。仅在真正构建任务参数时导入模型，
     # 避免执行 ``cli.py -h`` 时产生配置初始化日志。
@@ -719,6 +841,11 @@ def build_video_params(args: argparse.Namespace) -> VideoParams:
         "paragraph_number",
         "video_script_prompt",
         "custom_system_prompt",
+        "tv_product_images_prefix",
+        "tv_product_media_method",
+        "tv_product_animation_method",
+        "tv_product_animation_brand",
+        "tv_product_animation_model",
         "video_concat_mode",
         "video_transition_mode",
         "video_clip_duration",

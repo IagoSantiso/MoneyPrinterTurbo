@@ -1,0 +1,36 @@
+[
+  {
+    "brand": "Samsung",
+    "model": "QN90D",
+    "size_inches": 55,
+    "panel_type": "Mini-LED QLED",
+    "refresh_rate_hz": 144,
+    "hdr": "HDR10+",
+    "resolution": "4K",
+    "smart_platform": "Tizen",
+    "price": 1299.0,
+    "currency": "EUR",
+    "ideal_for": "gaming and bright rooms",
+    "pros": ["Very high peak brightness", "144Hz for consoles/PC", "Excellent anti-glare coating"],
+    "cons": ["No Dolby Vision", "Price premium over LG equivalent"],
+    "affiliate_url": "https://example.com/affiliate/samsung-qn90d",
+    "source": "manual"
+  },
+  {
+    "brand": "LG",
+    "model": "C4",
+    "size_inches": 55,
+    "panel_type": "OLED",
+    "refresh_rate_hz": 120,
+    "hdr": "HDR10, Dolby Vision, HLG",
+    "resolution": "4K",
+    "smart_platform": "webOS",
+    "price": 1399.0,
+    "currency": "EUR",
+    "ideal_for": "home cinema and dark rooms",
+    "pros": ["Perfect blacks", "Excellent for movies", "Near-zero input lag"],
+    "cons": ["Lower peak brightness than Mini-LED", "Risk of burn-in with static UI"],
+    "affiliate_url": "https://example.com/affiliate/lg-c4",
+    "source": "manual"
+  }
+]

@@ -289,6 +289,72 @@ def _fallback_write_videofile(clip, output_file: str, failed_codec: str, reason:
     return _DEFAULT_VIDEO_CODEC
 
 
+_TRUNCATED_OUTPUT_TOLERANCE = 0.9  # allow up to 10% short from rounding/fps snapping
+
+
+def _probe_decoded_video_duration(path: str) -> float:
+    """Decodes the video stream and returns how much of it actually played,
+    in seconds — unlike the container's declared duration (moov atom), this
+    catches a stream that silently stops decoding partway through while the
+    container metadata still claims the full length (observed in the wild:
+    ffmpeg exiting 0 after a truncated encode under resource pressure,
+    producing a file whose audio plays in full over a frozen last frame).
+    Returns 0.0 if ffmpeg can't be run or the probe itself fails — callers
+    should treat that as "could not verify", not as a confirmed truncation.
+    """
+    command = [
+        utils.get_ffmpeg_binary(),
+        "-v",
+        "error",
+        "-i",
+        path,
+        "-map",
+        "0:v:0",
+        "-f",
+        "null",
+        "-progress",
+        "pipe:1",
+        "-nostats",
+        "-",
+    ]
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+    except Exception as exc:
+        logger.warning(f"failed to probe decoded video duration for {path}: {exc}")
+        return 0.0
+
+    last_out_time_ms = None
+    for line in result.stdout.splitlines():
+        if line.startswith("out_time_ms="):
+            last_out_time_ms = line.split("=", 1)[1].strip()
+
+    if last_out_time_ms is None or not last_out_time_ms.lstrip("-").isdigit():
+        return 0.0
+    return max(0.0, int(last_out_time_ms) / 1_000_000)
+
+
+def _assert_output_not_truncated(output_file: str, expected_duration: float) -> None:
+    """Raises if the encoded output plays back noticeably shorter than
+    expected. See _probe_decoded_video_duration for why this can't rely on
+    the container's own duration metadata.
+    """
+    if expected_duration <= 0:
+        return
+    actual_duration = _probe_decoded_video_duration(output_file)
+    if actual_duration <= 0:
+        # Probe itself failed (missing ffmpeg, unreadable file, ...) — don't
+        # fail the task over a diagnostic that couldn't run.
+        return
+    if actual_duration < expected_duration * _TRUNCATED_OUTPUT_TOLERANCE:
+        raise RuntimeError(
+            f"encoded output is truncated: {output_file} only decodes "
+            f"{actual_duration:.2f}s of video, expected ~{expected_duration:.2f}s "
+            "(the container's own duration metadata can look correct even "
+            "though playback freezes early — this check decodes the real "
+            "stream instead of trusting it)"
+        )
+
+
 def _write_videofile_with_codec_fallback(clip, output_file: str, codec: str, **kwargs):
     """
     使用指定编码器写出视频，失败时自动用 libx264 重试一次。
@@ -754,7 +820,8 @@ def combine_videos(
         output_dir=output_dir,
         max_duration=audio_duration,
     )
-    
+    _assert_output_not_truncated(combined_video_path, audio_duration)
+
     # clean temp files
     delete_files(clip_files)
             
@@ -1282,6 +1349,7 @@ def generate_video(
         # 显式沿用输入音频的采样率；如果取不到，再回退 MoviePy 默认的 44100Hz。
         # 这样可以减少不同环境，尤其 Docker 中再次重采样带来的音质波动。
         output_audio_fps = int(getattr(audio_clip, "fps", 0) or 44100)
+        expected_duration = final_video_clip.duration
         _write_videofile_with_codec_fallback(
             final_video_clip,
             output_file=output_file,
@@ -1294,6 +1362,7 @@ def generate_video(
             logger=None,
             fps=fps,
         )
+        _assert_output_not_truncated(output_file, expected_duration)
         return bgm_mix_succeeded
 
 
